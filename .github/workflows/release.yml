@@ -1,0 +1,66 @@
+name: Release APK
+
+# Push a tag like v0.2.0 (or run manually with a version) to build, sign and publish an APK release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the leading v (e.g. 0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve version
+        id: v
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION%%-*}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))" >> "$GITHUB_OUTPUT"
+
+      - name: Decode keystore
+        shell: bash
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Make wrapper executable
+        run: chmod +x gradlew
+
+      - name: Build release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >
+          ./gradlew :app:assembleRelease
+          -PversionName=${{ steps.v.outputs.version }}
+          -PversionCode=${{ steps.v.outputs.code }}
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          APK="EkiStamps-${{ steps.v.outputs.version }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          gh release create "v${{ steps.v.outputs.version }}" "$APK" \
+            --title "v${{ steps.v.outputs.version }}" --generate-notes
