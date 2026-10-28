@@ -9,6 +9,7 @@ import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import com.ekistamp.app.data.local.EkiStampDatabase
+import com.ekistamp.app.data.prefs.ThemePreferences
 import com.ekistamp.app.data.remote.EkiStampRemoteDataSource
 import com.ekistamp.app.data.repository.EkiStampRepository
 import com.ekistamp.app.data.repository.EkiStampRepositoryImpl
@@ -27,6 +28,8 @@ class EkiStampApplication : Application(), SingletonImageLoader.Factory {
             translator = TranslationManager()
         )
     }
+
+    val themePreferences: ThemePreferences by lazy { ThemePreferences(this) }
 
     private val httpClient by lazy { OkHttpClient() }
 
